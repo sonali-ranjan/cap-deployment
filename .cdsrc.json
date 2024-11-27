@@ -1,0 +1,15 @@
+{
+    "requires": {
+        "auth": {
+            "users": {
+                "msg@test.com": {
+                    "password": "initial",
+                    "ID": "msg@test.com",
+                    "roles": [
+                        "Admin"
+                    ]
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,79 @@
+---
+_schema-version: 3.3.0
+ID: cap-deployment
+version: 1.0.0
+description: "A simple CAP project."
+parameters:
+  enable-parallel-deployments: true
+build-parameters:
+  before-all:
+    - builder: custom
+      commands:
+        - npm ci
+        - npx cds build --production
+modules:
+  - name: cap-deployment-srv
+    type: nodejs
+    path: gen/srv
+    parameters:
+      buildpack: nodejs_buildpack
+      readiness-health-check-type: http
+      readiness-health-check-http-endpoint: /health
+    build-parameters:
+      builder: npm
+    provides:
+      - name: srv-api # required by consumers of CAP services (e.g. approuter)
+        properties:
+          srv-url: ${default-url}
+    requires:
+      - name: cap-deployment-db
+      - name: cap-deployment-auth
+
+  - name: cap-deployment-db-deployer
+    type: hdb
+    path: gen/db
+    parameters:
+      buildpack: nodejs_buildpack
+    requires:
+      - name: cap-deployment-db
+
+  - name: cap-deployment
+    type: approuter.nodejs
+    path: app/router
+    parameters:
+      keep-existing-routes: true
+      disk-quota: 256M
+      memory: 256M
+    requires:
+      - name: srv-api
+        group: destinations
+        properties:
+          name: srv-api # must be used in xs-app.json as well
+          url: ~{srv-url}
+          forwardAuthToken: true
+      - name: cap-deployment-auth
+
+resources:
+  - name: cap-deployment-db
+    type: com.sap.xs.hdi-container
+    parameters:
+      service: hana
+      service-plan: hdi-shared
+  - name: cap-deployment-auth
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: xsuaa
+      service-plan: application
+      path: ./xs-security.json
+      config:
+        xsappname: cap-deployment-${org}-${space}
+        tenant-mode: dedicated
+        role-collections:
+          - name: 'Admin-${org}-${space}'
+            description: Admin
+            role-template-references:
+              - $XSAPPNAME.Admin
+          - name: 'Viewer-${org}-${space}'
+            description: App viewer
+            role-template-references:
+              - $XSAPPNAME.Viewer
